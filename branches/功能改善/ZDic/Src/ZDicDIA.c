@@ -149,6 +149,8 @@ static void ZDicDIAResizeForm ( FormType *frmP, RectangleType* fromBoundsP,
         case MainGotoButton:
         case MainHistoryPopupList:
         case MainHistoryTrigger:
+        case MainBackHistoryRepeatButton:
+        case MainExportToMemo:
             // Change x, y position.
             FrmGetObjectPosition ( frmP, i, &x, &y );
             FrmSetObjectPosition ( frmP, i, x + widthDelta, y +
@@ -158,8 +160,6 @@ static void ZDicDIAResizeForm ( FormType *frmP, RectangleType* fromBoundsP,
         case MainExitButton:
         case MainJumpPushButton:
         case MainSelectPushButton:
-        case MainBackHistoryRepeatButton:
-        case MainExportToMemo:
         case MainPlayVoice:
             // Change x position
             FrmGetObjectPosition ( frmP, i, &x, &y );

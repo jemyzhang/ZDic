@@ -212,6 +212,8 @@ typedef struct AppGlobalObj{
 		UInt8				recordBuf[ZDIC_MAX_RECORD_SIZE];			// use for PrvZDicVFSGetRowRecord
 	}data;
 	
+	Char		optflag;						//option key flag, 0: not pressed, 1: pressed once 2: always on
+	
 } AppGlobalType;
 
 typedef AppGlobalType *AppGlobalPtr;

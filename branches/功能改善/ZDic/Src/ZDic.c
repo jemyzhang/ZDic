@@ -1830,6 +1830,24 @@ static WChar ToolsHomeKeyChr(void) {
 }
 
 
+static void ToolsSetOptKeyStatus(Char s){
+    AppGlobalType	*global;
+
+    global = AppGetGlobal();
+
+	global->optflag = s;
+	FtrSet( appFileCreator, AppGlobalFtr, ( UInt32 ) global );
+
+}
+
+static char ToolsGetOptKeyStatus(void){
+    AppGlobalType	*global;
+
+    global = AppGetGlobal();
+
+	return global->optflag;
+
+}
 #pragma mark -
 
 /***********************************************************************
@@ -1918,20 +1936,21 @@ static void AppEventLoop( void )
         /* change timeout if you need periodic nilEvents */
         EvtGetEvent( &event, ticksPreHalfSecond /*evtWaitForever*/ );
     	if ( event.eType == keyDownEvent){	/*quit silently. jz080401*/
-    		if (event.data.keyDown.modifiers & commandKeyMask) {
-    			const UInt16 chr = event.data.keyDown.chr;
-    			if(chr == ToolsHomeKeyChr() )
+    		if (event.data.keyDown.modifiers & commandKeyMask
+			&& event.data.keyDown.chr == ToolsHomeKeyChr() ) {
     			break;
     			}
+		if(event.data.keyDown.modifiers & optionKeyMask	//enable option key
+			&& event.data.keyDown.chr == 0x160d){
+				Char s = ToolsGetOptKeyStatus();
+				s = s > 1 ? 0 : s+1;
+				ToolsSetOptKeyStatus(s);
+			}
     	}
         if ( event.eType != nilEvent )
             error = errNone;
 
-		// volup,voldown,sidekey
-		if(event.data.keyDown.chr != 0x161b &&
-			event.data.keyDown.chr != 0x161c &&
-			event.data.keyDown.chr != 0x161f &&
-            event.data.keyDown.chr != vchrHard2)
+		if(event.data.keyDown.chr != vchrHard2)
 		{
 			if(SysHandleEvent(&event)) continue;
 		}
@@ -1991,19 +2010,24 @@ static void AppDAEventLoop( Boolean enableSmallDA, Boolean *bGotoMainForm )
     			if(chr == ToolsHomeKeyChr() )
     			break;
     			}
+		if(event.data.keyDown.modifiers & optionKeyMask	//enable option key
+			&& event.data.keyDown.chr == 0x160d){
+				Char s = ToolsGetOptKeyStatus();
+				s = s > 1 ? 0 : s+1;
+				ToolsSetOptKeyStatus(s);
+			}
     	}
         
         if ( event.eType == keyDownEvent
                 && EvtKeydownIsVirtual( &event )
-                && event.data.keyDown.chr == vchrJogBack )
+                && event.data.keyDown.chr == vchrJogBack 
+                && event.data.keyDown.chr != vchrHard2)
         {
             break;
         }
 
 		// volup,voldown,sidekey
-		if(event.data.keyDown.chr != 0x161b &&
-			event.data.keyDown.chr != 0x161c &&
-			event.data.keyDown.chr != 0x161f)
+		if(event.data.keyDown.chr != vchrHard2)
 		{
 			if(SysHandleEvent(&event)) continue;
 		}
@@ -2014,7 +2038,8 @@ static void AppDAEventLoop( Boolean enableSmallDA, Boolean *bGotoMainForm )
         if ( enableSmallDA )
         {
             // Handle More button. we exit da form and goto main form.
-            if ( event.eType == ctlSelectEvent && event.data.ctlSelect.controlID == DAMoreButton )
+            if ( (event.eType == keyDownEvent && event.data.keyDown.chr == vchrHard2 ) ||
+            	(event.eType == ctlSelectEvent && event.data.ctlSelect.controlID == DAMoreButton) )
             {
                 FieldType	* field;
                 Char *str;
@@ -2225,6 +2250,7 @@ static void AppStop(void)
     global = AppGetGlobal();
     if ( global != NULL )
     {
+    	global->optflag = 0;	//reset optflag
         ZDicCloseCurrentDict();
 
         // Release the phonic font resource when app quits.
@@ -3229,6 +3255,62 @@ static Err DAFormChangeWordFieldCase( void )
     return errNone;
 }
 
+/***********************************************************************
+ *
+ * FUNCTION:	DaFormJumpSearch
+ *
+ * DESCRIPTION: Jump search a word if user select a word.
+ *
+ * PARAMETERS:
+ *				->	event The Event that we received.
+ *
+ * RETURN:
+ *				true if handled else false.
+ *
+ * REVISION HISTORY:
+ *		Name			Date		Description
+ *		----			----		-----------
+ *		JEMYZHANG	06/Apr/08	Initial Revision
+ *
+ ***********************************************************************/
+
+static Boolean DAFormJumpSearch( EventType * event )
+{
+    FormType	* frmP;
+    Char	*buf;
+    FieldType	*field;
+    AppGlobalType	*global;
+    Boolean	handled = false;
+
+    if ( event->data.fldEnter.fieldID != DADescriptionField )
+        return false;
+
+    field = ( FieldType * ) GetObjectPtr( DADescriptionField );
+    if ( FldHandleEvent ( field, event ) )
+    {
+        global = AppGetGlobal();
+        buf = ( Char * ) global->data.readBuf;
+
+        if ( !global->prefs.getClipBoardAtStart )
+        {
+            // put old word into history and search new word and put it into history.
+            ToolsPutWordFieldToHistory( DAWordField );
+            if ( ToolsGetFieldHighlightText( field, buf, MAX_WORD_LEN, global->prefs.enableSingleTap ) == errNone )
+            {
+                ToolsSetFieldPtr( DAWordField, buf, StrLen( buf ), true );
+ 				DAFormSearch( false, global->prefs.enableHighlightWord, false, global->prefs.enableAutoSpeech );
+                // Set force to input field.
+                frmP = FrmGetActiveForm ();
+                FrmSetFocus( frmP, FrmGetObjectIndex( frmP, DAWordField ) );
+            }
+        }
+        handled = true;
+    }
+
+    return handled;
+}
+
+
 /*
  * FUNCTION: MainFormDoCommand
  *
@@ -3456,10 +3538,11 @@ static void DAFormInit( FormType *frmP )
     FrmSetFocus( frmP, FrmGetObjectIndex( frmP, DAWordField ) );
 
     // Set get word source.
+    /*
     FrmSetControlGroupSelection ( frmP, 1,
                                   global->prefs.getClipBoardAtStart ?
                                   DAClipboardPushButton : DASelectPushButton );
-
+    */
     // set da form location
     {
         WinHandle	winH;
@@ -3569,31 +3652,11 @@ static Boolean DAFormHandleEvent( EventType * eventP )
                 DAFormSearch( true, global->prefs.enableHighlightWord, false, global->prefs.enableAutoSpeech );
                 handled = true;
             }
-	     	else if( eventP->data.keyDown.modifiers & optionKeyMask){
-	        	if ( NavDirectionPressed( eventP, Up )
-	                        || ( eventP->data.keyDown.chr ) == vchrRockerUp
-	                        || ( eventP->data.keyDown.chr ) == vchrPageUp
-	                        || ( eventP->data.keyDown.chr ) == vchrThumbWheelUp
-	                        //	|| (eventP->data.keyDown.chr) == vchrJogUp
-	               )//seek the previous dic
-	        	{
-                    ToolsPrevDictionaryCommand();
-	        		handled = true;
-	        	}
-	        	else  if ( NavDirectionPressed( eventP, Down )
-	                        || ( eventP->data.keyDown.chr ) == vchrRockerDown
-	                        || ( eventP->data.keyDown.chr ) == vchrPageDown
-	                        || ( eventP->data.keyDown.chr ) == vchrThumbWheelDown
-	                        //	|| (eventP->data.keyDown.chr) == vchrJogDown
-	                   ) //seek the next dic
-	        	{
-                    ToolsNextDictionaryCommand();
-	        		handled = true;
-	        	}
-	     	}
 
             else if ( EvtKeydownIsVirtual( eventP ) )
             {
+
+               	Char s = ToolsGetOptKeyStatus();
 
                 if ( NavDirectionPressed( eventP, Up )
                         || ( eventP->data.keyDown.chr ) == vchrRockerUp
@@ -3602,7 +3665,12 @@ static Boolean DAFormHandleEvent( EventType * eventP )
                         //	|| (eventP->data.keyDown.chr) == vchrJogUp
                    )
                 {
-                    ToolsPageScroll ( winUp, DADescriptionField, DADescriptionScrollBar, DAWordField, DAPlayVoice, global->prefs.enableHighlightWord );
+					if( s > 0){
+						ToolsPrevDictionaryCommand();
+						if(s < 2) ToolsSetOptKeyStatus(0);
+					}else{
+                    	ToolsPageScroll ( winUp, DADescriptionField, DADescriptionScrollBar, DAWordField, DAPlayVoice, global->prefs.enableHighlightWord );
+                    }
                     handled = true;
                 }
                 else if ( NavDirectionPressed( eventP, Down )
@@ -3612,18 +3680,29 @@ static Boolean DAFormHandleEvent( EventType * eventP )
                           //	|| (eventP->data.keyDown.chr) == vchrJogDown
                         )
                 {
-                    ToolsPageScroll ( winDown, DADescriptionField, DADescriptionScrollBar, DAWordField, DAPlayVoice, global->prefs.enableHighlightWord );
+					if( s > 0){
+						ToolsNextDictionaryCommand();
+						if(s < 2) ToolsSetOptKeyStatus(0);
+					}else{
+                    	ToolsPageScroll ( winDown, DADescriptionField, DADescriptionScrollBar, DAWordField, DAPlayVoice, global->prefs.enableHighlightWord );
+                    }
                     handled = true;
                 }
                 else if ( NavDirectionPressed( eventP, Left ) )
                 {
-                    ToolsScrollWord ( winUp, DADescriptionField, DADescriptionScrollBar, DAWordField, DAPlayVoice, global->prefs.enableHighlightWord );
+                	if( s > 0 ){
+	                	if(s < 2) ToolsSetOptKeyStatus(0);
+	                    ToolsScrollWord ( winUp, DADescriptionField, DADescriptionScrollBar, DAWordField, DAPlayVoice, global->prefs.enableHighlightWord );
                     handled = true;
+                }
                 }
                 else if ( NavDirectionPressed( eventP, Right ) )
                 {
-                    ToolsScrollWord ( winDown, DADescriptionField, DADescriptionScrollBar, DAWordField, DAPlayVoice, global->prefs.enableHighlightWord );
+                	if( s > 0 ){
+	                	if(s < 2) ToolsSetOptKeyStatus(0);
+	                    ToolsScrollWord ( winDown, DADescriptionField, DADescriptionScrollBar, DAWordField, DAPlayVoice, global->prefs.enableHighlightWord );
                     handled = true;
+                }
                 }
                 else if ( NavSelectPressed( eventP )
                           || ( eventP->data.keyDown.chr ) == vchrRockerCenter
@@ -3631,17 +3710,12 @@ static Boolean DAFormHandleEvent( EventType * eventP )
                           || ( eventP->data.keyDown.chr ) == vchrJogRelease
                         )
                 {
+					if( s > 0){
+						ToolsPlayVoice();
+						if(s < 2) ToolsSetOptKeyStatus(0);
+					}else{
                     ToolsOpenNextDict( DAForm );
-                    handled = true;
                 }
-	            else if( eventP->data.keyDown.chr == 0x161f){
-					ToolsPlayVoice();
-					handled = true;
-				}else if( eventP->data.keyDown.chr == 0x161b){
-                    ToolsPrevDictionaryCommand();
-	        		handled = true;
-				}else if( eventP->data.keyDown.chr == 0x161c){
-                    ToolsNextDictionaryCommand();
 	        		handled = true;
 				}
             }
@@ -3663,6 +3737,9 @@ static Boolean DAFormHandleEvent( EventType * eventP )
 
             break;
         }
+    case fldEnterEvent:
+    	handled = DAFormJumpSearch(eventP);
+    	break;
 
     case sclRepeatEvent:
         {
@@ -3677,7 +3754,13 @@ static Boolean DAFormHandleEvent( EventType * eventP )
                     || eventP->data.ctlSelect.controlID == DASelectPushButton )
             {
                 global->prefs.getClipBoardAtStart =
-                    eventP->data.ctlSelect.controlID == DAClipboardPushButton ? true : false;
+                    eventP->data.ctlSelect.controlID == DASelectPushButton ? true : false;
+
+                frmP = FrmGetActiveForm();
+                if(global->prefs.getClipBoardAtStart){
+                	HideObject( frmP, DASelectPushButton);
+                	ShowObject( frmP, DAClipboardPushButton);
+
                 ToolsGetStartWord (global);
 
                 // Initial word for word field.
@@ -3685,6 +3768,7 @@ static Boolean DAFormHandleEvent( EventType * eventP )
                 {
                     ToolsSetFieldPtr( DAWordField, &global->initKeyWord[ 0 ], StrLen( &global->initKeyWord[ 0 ] ), true );
                     DAFormSearch( true, global->prefs.enableHighlightWord, false, global->prefs.enableAutoSpeech );
+                }
                 }
 
                 handled = true;
@@ -3706,6 +3790,19 @@ static Boolean DAFormHandleEvent( EventType * eventP )
             {
                 ToolsSendMenuCmd( global->prefs.exportAppCreatorID == sysFileCMemo ? chrCapital_M : chrCapital_Z );
                 handled = true;
+            }
+            else if ( eventP->data.ctlSelect.controlID == MainAutoVoiceOnButton)
+            {
+                global->prefs.enableAutoSpeech = ( CtlGetValue ( GetObjectPtr ( MainAutoVoiceOnButton ) ) != 0 );
+                handled = true;
+            }
+            else if ( eventP->data.ctlSelect.controlID == MainAutoSearchOnButton)
+            {
+                global->prefs.enableIncSearch = ( CtlGetValue ( GetObjectPtr ( MainAutoSearchOnButton ) ) != 0 );
+                handled = true;
+            }
+            else if( eventP->data.ctlSelect.controlID == MainCapChange){
+            	handled = DAFormDoCommand(OptionsChangeCase);
             }
 
 
@@ -4663,6 +4760,9 @@ static void MainFormInit( FormType *frmP )
     FrmSetControlGroupSelection ( frmP, 1,
                                   global->prefs.enableJumpSearch ?
                                   MainJumpPushButton : MainSelectPushButton );
+    // Set enable autovoice
+    CtlSetValue ( GetObjectPtr ( MainAutoVoiceOnButton ), global->prefs.enableAutoSpeech );
+    CtlSetValue ( GetObjectPtr ( MainAutoSearchOnButton ), global->prefs.enableIncSearch );
 
     return ;
 }
@@ -4720,11 +4820,18 @@ static Boolean MainFormDoCommand( UInt16 command )
         }
     case OptionsPreferences:
         {
+        	FormType *frmP;
+        	
             // Clear the menu status from the display
             MenuEraseStatus( 0 );
 
             // Display the details from the display
             DetailsFormPopupDetailsDialog();
+
+	        frmP = FrmGetActiveForm();
+		    // Set enable jump search group selection.
+           CtlSetValue ( GetObjectPtr ( MainAutoVoiceOnButton ), global->prefs.enableAutoSpeech );
+           CtlSetValue ( GetObjectPtr ( MainAutoSearchOnButton ), global->prefs.enableIncSearch );
             handled = true;
             break;
         }
@@ -4971,6 +5078,19 @@ static Boolean MainFormHandleEvent( EventType * eventP )
                 ToolsSendMenuCmd( global->prefs.exportAppCreatorID == sysFileCMemo ? chrCapital_M : chrCapital_Z );
                 handled = true;
             }
+            else if ( eventP->data.ctlSelect.controlID == MainAutoVoiceOnButton)
+            {
+                global->prefs.enableAutoSpeech = ( CtlGetValue ( GetObjectPtr ( MainAutoVoiceOnButton ) ) != 0 );
+                handled = true;
+            }
+            else if ( eventP->data.ctlSelect.controlID == MainAutoSearchOnButton)
+            {
+                global->prefs.enableIncSearch = ( CtlGetValue ( GetObjectPtr ( MainAutoSearchOnButton ) ) != 0 );
+                handled = true;
+            }
+            else if( eventP->data.ctlSelect.controlID == MainCapChange){
+            	handled = MainFormDoCommand(OptionsChangeCase);
+            }
 
             break;
         }
@@ -5008,35 +5128,10 @@ static Boolean MainFormHandleEvent( EventType * eventP )
                 MainFormSearch( true, true, global->prefs.enableHighlightWord, true, false, global->prefs.enableAutoSpeech );
                 handled = true;
             }
-	     	else if( eventP->data.keyDown.modifiers & optionKeyMask){
-	        	if ( NavDirectionPressed( eventP, Up )
-	                        || ( eventP->data.keyDown.chr ) == vchrRockerUp
-	                        || ( eventP->data.keyDown.chr ) == vchrPageUp
-	                        || ( eventP->data.keyDown.chr ) == vchrThumbWheelUp
-	                        //	|| (eventP->data.keyDown.chr) == vchrJogUp
-	               )//seek the previous dic
-	        	{
-                    ToolsPrevDictionaryCommand();
-	        		handled = true;
-	        	}
-	        	else  if ( NavDirectionPressed( eventP, Down )
-	                        || ( eventP->data.keyDown.chr ) == vchrRockerDown
-	                        || ( eventP->data.keyDown.chr ) == vchrPageDown
-	                        || ( eventP->data.keyDown.chr ) == vchrThumbWheelDown
-	                        //	|| (eventP->data.keyDown.chr) == vchrJogDown
-	                   ) //seek the next dic
-	        	{
-                    ToolsNextDictionaryCommand();
-	        		handled = true;
-	        	}
-				else if( eventP->data.keyDown.chr == keySpace)
-				{
-					ToolsPlayVoice();
-					handled = true;
-				}
-	     	}
             else if ( EvtKeydownIsVirtual( eventP ) )
             {
+               	Char s = ToolsGetOptKeyStatus();
+
                 if ( NavDirectionPressed( eventP, Up )
                         || ( eventP->data.keyDown.chr ) == vchrRockerUp
                         || ( eventP->data.keyDown.chr ) == vchrPageUp
@@ -5044,7 +5139,14 @@ static Boolean MainFormHandleEvent( EventType * eventP )
                         //	|| (eventP->data.keyDown.chr) == vchrJogUp
                    )
                 {
-                    ToolsPageScroll ( winUp, MainDescriptionField, MainDescScrollBar, MainWordField, MainPlayVoice, global->prefs.enableHighlightWord );
+                	Char s = ToolsGetOptKeyStatus();
+					
+					if( s > 0){
+						ToolsPrevDictionaryCommand();
+						if(s < 2) ToolsSetOptKeyStatus(0);
+					}else{
+                    	ToolsPageScroll ( winUp, MainDescriptionField, MainDescScrollBar, MainWordField, MainPlayVoice, global->prefs.enableHighlightWord );
+					}
                     handled = true;
                 }
                 else if ( NavDirectionPressed( eventP, Down )
@@ -5054,20 +5156,31 @@ static Boolean MainFormHandleEvent( EventType * eventP )
                           //	|| (eventP->data.keyDown.chr) == vchrJogDown
                         )
                 {
-                    ToolsPageScroll ( winDown, MainDescriptionField, MainDescScrollBar, MainWordField, MainPlayVoice, global->prefs.enableHighlightWord );
+					if( s > 0){
+						ToolsNextDictionaryCommand();
+						if(s < 2) ToolsSetOptKeyStatus(0);
+					}else{
+                    	ToolsPageScroll ( winDown, MainDescriptionField, MainDescScrollBar, MainWordField, MainPlayVoice, global->prefs.enableHighlightWord );
+					}
                     handled = true;
                 }
                 else if ( NavDirectionPressed( eventP, Left ) )
                 {
-                    ToolsScrollWord ( winUp, MainDescriptionField, MainDescScrollBar, MainWordField, MainPlayVoice, global->prefs.enableHighlightWord );
+					if( s > 0){
+						if(s < 2) ToolsSetOptKeyStatus(0);
+	                    ToolsScrollWord ( winUp, MainDescriptionField, MainDescScrollBar, MainWordField, MainPlayVoice, global->prefs.enableHighlightWord );
                 MainFormUpdateWordList( );
                     handled = true;
                 }
+                }
                 else if ( NavDirectionPressed( eventP, Right ) )
                 {
-                    ToolsScrollWord ( winDown, MainDescriptionField, MainDescScrollBar, MainWordField, MainPlayVoice, global->prefs.enableHighlightWord );
+					if( s > 0){
+						if(s < 2) ToolsSetOptKeyStatus(0);
+	                    ToolsScrollWord ( winDown, MainDescriptionField, MainDescScrollBar, MainWordField, MainPlayVoice, global->prefs.enableHighlightWord );
                 MainFormUpdateWordList( );
                     handled = true;
+                }
                 }
                 else if ( NavSelectPressed( eventP )
                           || ( eventP->data.keyDown.chr ) == vchrRockerCenter
@@ -5075,19 +5188,16 @@ static Boolean MainFormHandleEvent( EventType * eventP )
                           || ( eventP->data.keyDown.chr ) == vchrJogRelease
                         )
                 {
+					if( s > 0){
+						ToolsPlayVoice();
+						if(s < 2) ToolsSetOptKeyStatus(0);
+					}else{
                     ToolsOpenNextDict( MainForm );
+					}
+                    
                     handled = true;
                 }
-	            else if( eventP->data.keyDown.chr == 0x161f){
-					ToolsPlayVoice();
-					handled = true;
-				}else if( eventP->data.keyDown.chr == 0x161b){
-                    ToolsPrevDictionaryCommand();
-	        		handled = true;
-				}else if( eventP->data.keyDown.chr == 0x161c){
-                    ToolsNextDictionaryCommand();
-	        		handled = true;
-				}else if( eventP->data.keyDown.chr == vchrHard2){
+				else if( eventP->data.keyDown.chr == vchrHard2){
 //                    MainFormPopupHistoryList();
                 if ( !global->prefs.enableWordList && global->wordListIsOn )
                     global->prefs.enableWordList = false;
