@@ -3538,11 +3538,9 @@ static void DAFormInit( FormType *frmP )
     FrmSetFocus( frmP, FrmGetObjectIndex( frmP, DAWordField ) );
 
     // Set get word source.
-    /*
     FrmSetControlGroupSelection ( frmP, 1,
                                   global->prefs.getClipBoardAtStart ?
                                   DAClipboardPushButton : DASelectPushButton );
-    */
     // set da form location
     {
         WinHandle	winH;
@@ -3557,6 +3555,8 @@ static void DAFormInit( FormType *frmP )
         winH = FrmGetWindowHandle ( frmP );
         WinSetBounds( winH, &r );
     }
+    CtlSetValue ( GetObjectPtr ( DAutoVoiceOnButton ), global->prefs.enableAutoSpeech );
+    CtlSetValue ( GetObjectPtr ( DAutoSearchOnButton ), global->prefs.enableIncSearch );
 
     return ;
 }
@@ -3758,8 +3758,6 @@ static Boolean DAFormHandleEvent( EventType * eventP )
 
                 frmP = FrmGetActiveForm();
                 if(global->prefs.getClipBoardAtStart){
-                	HideObject( frmP, DASelectPushButton);
-                	ShowObject( frmP, DAClipboardPushButton);
 
                 ToolsGetStartWord (global);
 
@@ -3791,17 +3789,17 @@ static Boolean DAFormHandleEvent( EventType * eventP )
                 ToolsSendMenuCmd( global->prefs.exportAppCreatorID == sysFileCMemo ? chrCapital_M : chrCapital_Z );
                 handled = true;
             }
-            else if ( eventP->data.ctlSelect.controlID == MainAutoVoiceOnButton)
+            else if ( eventP->data.ctlSelect.controlID == DAutoVoiceOnButton)
             {
-                global->prefs.enableAutoSpeech = ( CtlGetValue ( GetObjectPtr ( MainAutoVoiceOnButton ) ) != 0 );
+                global->prefs.enableAutoSpeech = ( CtlGetValue ( GetObjectPtr ( DAutoVoiceOnButton ) ) != 0 );
                 handled = true;
             }
-            else if ( eventP->data.ctlSelect.controlID == MainAutoSearchOnButton)
+            else if ( eventP->data.ctlSelect.controlID == DAutoSearchOnButton)
             {
-                global->prefs.enableIncSearch = ( CtlGetValue ( GetObjectPtr ( MainAutoSearchOnButton ) ) != 0 );
+                global->prefs.enableIncSearch = ( CtlGetValue ( GetObjectPtr ( DAutoSearchOnButton ) ) != 0 );
                 handled = true;
             }
-            else if( eventP->data.ctlSelect.controlID == MainCapChange){
+            else if( eventP->data.ctlSelect.controlID == DACapChange){
             	handled = DAFormDoCommand(OptionsChangeCase);
             }
 

@@ -1,9 +1,12 @@
 /* pilrc generated file.  Do not edit!*/
-#define SugarMemoDBName 1106
-#define SugarMemoDefaultRecordHead 1105
-#define SugarMemoDefaultDBImage 1104
-#define ProcessFormProcessButton 1103
-#define ProcessForm 1102
+#define SugarMemoDBName 1109
+#define SugarMemoDefaultRecordHead 1108
+#define SugarMemoDefaultDBImage 1107
+#define ProcessFormProcessButton 1106
+#define ProcessForm 1105
+#define DACapChange 1104
+#define DAutoSearchOnButton 1103
+#define DAutoVoiceOnButton 1102
 #define DAExportToMemo 1101
 #define DAPlayVoice 1100
 #define DANextDict 1099
