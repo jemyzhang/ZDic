@@ -3291,7 +3291,7 @@ static Boolean DAFormJumpSearch( EventType * event )
         global = AppGetGlobal();
         buf = ( Char * ) global->data.readBuf;
 
-        if ( !global->prefs.getClipBoardAtStart )
+        if ( global->prefs.enableJumpSearch )
         {
             // put old word into history and search new word and put it into history.
             ToolsPutWordFieldToHistory( DAWordField );
@@ -3539,7 +3539,7 @@ static void DAFormInit( FormType *frmP )
 
     // Set get word source.
     FrmSetControlGroupSelection ( frmP, 1,
-                                  global->prefs.getClipBoardAtStart ?
+                                  global->prefs.enableJumpSearch ?
                                   DAClipboardPushButton : DASelectPushButton );
     // set da form location
     {
@@ -3753,21 +3753,8 @@ static Boolean DAFormHandleEvent( EventType * eventP )
             if ( eventP->data.ctlSelect.controlID == DAClipboardPushButton
                     || eventP->data.ctlSelect.controlID == DASelectPushButton )
             {
-                global->prefs.getClipBoardAtStart =
-                    eventP->data.ctlSelect.controlID == DASelectPushButton ? true : false;
-
-                frmP = FrmGetActiveForm();
-                if(global->prefs.getClipBoardAtStart){
-
-                ToolsGetStartWord (global);
-
-                // Initial word for word field.
-                if ( global->initKeyWord[ 0 ] != chrNull )
-                {
-                    ToolsSetFieldPtr( DAWordField, &global->initKeyWord[ 0 ], StrLen( &global->initKeyWord[ 0 ] ), true );
-                    DAFormSearch( true, global->prefs.enableHighlightWord, false, global->prefs.enableAutoSpeech );
-                }
-                }
+                global->prefs.enableJumpSearch =
+                    eventP->data.ctlSelect.controlID == DAClipboardPushButton ? true : false;
 
                 handled = true;
             }
